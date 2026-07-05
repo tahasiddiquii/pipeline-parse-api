@@ -76,6 +76,7 @@ def test_real_reactflow_shaped_payload():
 
 def test_run_substitutes_variables_without_llm():
     # Input -> Text ({{name}}) -> Output runs fully offline (no LLM, no key needed).
+    # Handles are node-id-prefixed exactly as the UI emits them (e.g. "text-1-var-name").
     payload = {
         "nodes": [
             {"id": "customInput-1", "type": "customInput", "data": {"value": "world"}},
@@ -83,8 +84,8 @@ def test_run_substitutes_variables_without_llm():
             {"id": "customOutput-1", "type": "customOutput", "data": {"outputName": "greeting"}},
         ],
         "edges": [
-            {"source": "customInput-1", "target": "text-1", "sourceHandle": "value", "targetHandle": "var-name"},
-            {"source": "text-1", "target": "customOutput-1", "sourceHandle": "output", "targetHandle": "value"},
+            {"source": "customInput-1", "target": "text-1", "sourceHandle": "customInput-1-value", "targetHandle": "text-1-var-name"},
+            {"source": "text-1", "target": "customOutput-1", "sourceHandle": "text-1-output", "targetHandle": "customOutput-1-value"},
         ],
     }
     response = client.post("/pipelines/run", json=payload)

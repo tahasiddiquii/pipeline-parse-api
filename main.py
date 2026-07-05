@@ -108,6 +108,15 @@ def is_dag(nodes: list[Node], edges: list[Edge]) -> bool:
     return _topo_order(nodes, edges) is not None
 
 
+def _bare_handle(node_id: str, handle: str | None) -> str | None:
+    """Handles rendered by the UI are prefixed with the node id (e.g. 'llm-1-prompt').
+    Reduce them to the config handle id ('prompt') so execution can match on it.
+    """
+    if handle and node_id and handle.startswith(f"{node_id}-"):
+        return handle[len(node_id) + 1:]
+    return handle
+
+
 def _provider_error(name: str, response: httpx.Response) -> str:
     try:
         message = response.json().get("error", {}).get("message")
@@ -194,7 +203,9 @@ def _run_pipeline(req: RunRequest) -> RunResponse:
     incoming: dict[str, list[tuple]] = defaultdict(list)
     for edge in req.edges:
         if edge.source in node_by_id and edge.target in node_by_id:
-            incoming[edge.target].append((edge.targetHandle, edge.source, edge.sourceHandle))
+            incoming[edge.target].append(
+                (_bare_handle(edge.target, edge.targetHandle), edge.source, _bare_handle(edge.source, edge.sourceHandle))
+            )
 
     keys = {"openai": req.openai_key, "anthropic": req.anthropic_key}
     budget = {"calls": 0}
@@ -237,7 +248,7 @@ def _run_pipeline(req: RunRequest) -> RunResponse:
             merged = "\n".join(str(v) for v in inputs.values())
             for edge in req.edges:
                 if edge.source == node_id:
-                    handle_values[(node_id, edge.sourceHandle)] = merged
+                    handle_values[(node_id, _bare_handle(node_id, edge.sourceHandle))] = merged
 
     return RunResponse(outputs=outputs, llm_calls=budget["calls"])
 
