@@ -72,3 +72,51 @@ def test_real_reactflow_shaped_payload():
     response = client.post("/pipelines/parse", json=payload)
     body = response.json()
     assert body == {"num_nodes": 2, "num_edges": 1, "is_dag": True}
+
+
+def test_run_substitutes_variables_without_llm():
+    # Input -> Text ({{name}}) -> Output runs fully offline (no LLM, no key needed).
+    payload = {
+        "nodes": [
+            {"id": "customInput-1", "type": "customInput", "data": {"value": "world"}},
+            {"id": "text-1", "type": "text", "data": {"text": "Hello {{name}}"}},
+            {"id": "customOutput-1", "type": "customOutput", "data": {"outputName": "greeting"}},
+        ],
+        "edges": [
+            {"source": "customInput-1", "target": "text-1", "sourceHandle": "value", "targetHandle": "var-name"},
+            {"source": "text-1", "target": "customOutput-1", "sourceHandle": "output", "targetHandle": "value"},
+        ],
+    }
+    response = client.post("/pipelines/run", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["outputs"] == {"greeting": "Hello world"}
+    assert body["llm_calls"] == 0
+
+
+def test_run_rejects_cycle():
+    payload = {
+        "nodes": [{"id": "a", "type": "text"}, {"id": "b", "type": "text"}],
+        "edges": [{"source": "a", "target": "b"}, {"source": "b", "target": "a"}],
+    }
+    response = client.post("/pipelines/run", json=payload)
+    assert response.status_code == 400
+    assert "cycle" in response.json()["detail"].lower()
+
+
+def test_run_requires_key_for_llm_model():
+    payload = {"nodes": [{"id": "llm-1", "type": "llm", "data": {"model": "gpt-5.4-mini"}}], "edges": []}
+    response = client.post("/pipelines/run", json=payload)
+    assert response.status_code == 400
+    assert "OpenAI API key" in response.json()["detail"]
+
+
+def test_run_rejects_unknown_model():
+    payload = {
+        "nodes": [{"id": "llm-1", "type": "llm", "data": {"model": "totally-made-up"}}],
+        "edges": [],
+        "openai_key": "sk-test",
+    }
+    response = client.post("/pipelines/run", json=payload)
+    assert response.status_code == 400
+    assert "Unknown model" in response.json()["detail"]
